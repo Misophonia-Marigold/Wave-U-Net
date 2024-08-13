@@ -6,9 +6,9 @@ config_ingredient = Ingredient("cfg")
 @config_ingredient.config
 def cfg():
     # Base configuration
-    model_config = {"musdb_path" : "/mnt/windaten/Datasets/MUSDB18/", # SET MUSDB PATH HERE, AND SET CCMIXTER PATH IN CCMixter.xml
-                    "estimates_path" : "/mnt/windaten/Source_Estimates", # SET THIS PATH TO WHERE YOU WANT SOURCE ESTIMATES PRODUCED BY THE TRAINED MODEL TO BE SAVED. Folder itself must exist!
-                    "data_path" : "data", # Set this to where the preprocessed dataset should be saved
+    model_config = {"musdb_path" : "./drive/MyDrive/Wave-U/Directory", # SET MUSDB PATH HERE, AND SET CCMIXTER PATH IN CCMixter.xml
+                    "estimates_path" : "./drive/MyDrive/Wave-U/estimates_path", # SET THIS PATH TO WHERE YOU WANT SOURCE ESTIMATES PRODUCED BY THE TRAINED MODEL TO BE SAVED. Folder itself must exist!
+                    "data_path" : "./drive/MyDrive/Wave-U/data_path", # Set this to where the preprocessed dataset should be saved
 
                     "model_base_dir" : "checkpoints", # Base folder for model checkpoints
                     "log_dir" : "logs", # Base folder for logs files
@@ -41,7 +41,7 @@ def cfg():
 
     # Set output sources
     if model_config["task"] == "multi_instrument":
-        model_config["source_names"] = ["bass", "drums", "other", "vocals"]
+        model_config["source_names"] = ["cough", "other"]
     elif model_config["task"] == "voice":
         model_config["source_names"] = ["accompaniment", "vocals"]
     else:
