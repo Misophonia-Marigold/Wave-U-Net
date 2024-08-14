@@ -1,3 +1,4 @@
+'''
 import glob
 import os.path
 import random
@@ -293,3 +294,214 @@ def getCCMixter(xml_path):
         samples.append({"mix" : mix, "accompaniment" : acc, "vocals" : voice})
 
     return samples
+'''
+
+import glob
+import os.path
+import random
+from multiprocessing import Process
+
+import Utils
+
+import numpy as np
+import librosa
+import soundfile
+import tensorflow as tf
+
+# Define a function to load your custom dataset
+def get_custom_dataset(data_path, partition):
+    dataset = []
+
+    for track in os.listdir(data_path):
+        if partition in track:
+            mix_path = os.path.join(data_path, track, 'mix.wav')
+            cough_path = os.path.join(data_path, track, 'cough.wav')
+            speech_path = os.path.join(data_path, track, 'speech.wav')
+
+            sample = {
+                'mix': mix_path,
+                'cough': cough_path,
+                'speech': speech_path
+            }
+
+            dataset.append(sample)
+
+    return dataset
+
+def _floats_feature(value):
+    return tf.train.Feature(float_list=tf.train.FloatList(value=value.reshape(-1)))
+
+def _int64_feature(value):
+    """Returns an int64_list from a bool / enum / int / uint."""
+    return tf.train.Feature(int64_list=tf.train.Int64List(value=[value]))
+
+def write_records(sample_list, model_config, input_shape, output_shape, records_path):
+    # Writes samples in the given list as TFrecords into a given path, using the current model config and in/output shapes
+
+    # Compute padding
+    if (input_shape[1] - output_shape[1]) % 2 != 0:
+        print("WARNING: Required number of padding of " + str(input_shape[1] - output_shape[1]) + " is uneven!")
+    pad_frames = (input_shape[1] - output_shape[1]) // 2
+
+    # Set up writers
+    num_writers = 1
+    writers = [tf.io.TFRecordWriter(records_path + str(i) + ".tfrecords") for i in range(num_writers)]
+
+    # Go through songs and write them to TFRecords
+    all_keys = model_config["source_names"] + ["mix"]
+    for sample in sample_list:
+        print("Reading song")
+        try:
+            audio_tracks = dict()
+
+            for key in all_keys:
+                audio, _ = Utils.load(sample[key], sr=model_config["expected_sr"], mono=model_config["mono_downmix"])
+
+                if not model_config["mono_downmix"] and audio.shape[1] == 1:
+                    print("WARNING: Had to duplicate mono track to generate stereo")
+                    audio = np.tile(audio, [1, 2])
+
+                audio_tracks[key] = audio
+        except Exception as e:
+            print(e)
+            print("ERROR occurred during loading file " + str(sample) + ". Skipping")
+            continue
+
+        # Pad at beginning and end with zeros
+        audio_tracks = {key : np.pad(audio_tracks[key], [(pad_frames, pad_frames), (0, 0)], mode="constant", constant_values=0.0) for key in list(audio_tracks.keys())}
+
+        # All audio tracks must be exactly same length and channels
+        length = audio_tracks["mix"].shape[0]
+        channels = audio_tracks["mix"].shape[1]
+        for audio in list(audio_tracks.values()):
+            assert(audio.shape[0] == length)
+            assert (audio.shape[1] == channels)
+
+        # Write to TFrecords the flattened version
+        feature = {key: _floats_feature(audio_tracks[key]) for key in all_keys}
+        feature["length"] = _int64_feature(length)
+        feature["channels"] = _int64_feature(channels)
+        sample = tf.train.Example(features=tf.train.Features(feature=feature))
+        writers[np.random.randint(0, num_writers)].write(sample.SerializeToString())
+
+    for writer in writers:
+        writer.close()
+
+def parse_record(example_proto, source_names, shape):
+    # Parse record from TFRecord file
+
+    all_names = source_names + ["mix"]
+
+    features = {key : tf.io.FixedLenSequenceFeature([], allow_missing=True, dtype=tf.float32) for key in all_names}
+    features["length"] = tf.io.FixedLenFeature([], tf.int64)
+    features["channels"] = tf.io.FixedLenFeature([], tf.int64)
+
+    parsed_features = tf.io.parse_single_example(example_proto, features)
+
+    # Reshape
+    length = tf.cast(parsed_features["length"], tf.int64)
+    channels = tf.constant(shape[-1], tf.int64)
+    sample = dict()
+    for key in all_names:
+        sample[key] = tf.reshape(parsed_features[key], tf.stack([length, channels]))
+    sample["length"] = length
+    sample["channels"] = channels
+
+    return sample
+
+def get_dataset(model_config, input_shape, output_shape, partition):
+    '''
+    For a model configuration and input/output shapes of the network, get the corresponding dataset for a given partition
+    :param model_config: Model config
+    :param input_shape: Input shape of network
+    :param output_shape: Output shape of network
+    :param partition: "train", "valid", or "test" partition
+    :return: Tensorflow dataset object
+    '''
+
+    dataset_name = "task_" + model_config["task"] + "_" + \
+                   "sr_" + str(model_config["expected_sr"]) + "_" + \
+                   "mono_" + str(model_config["mono_downmix"])
+    main_folder = os.path.join(model_config["data_path"], dataset_name)
+
+    if not os.path.exists(main_folder):
+        # Load your custom dataset
+        print("Preparing custom dataset! This could take a while...")
+
+        dataset = dict()
+        dataset["train"] = get_custom_dataset(model_config["data_path"], "train")
+        dataset["valid"] = get_custom_dataset(model_config["data_path"], "valid")
+        dataset["test"] = get_custom_dataset(model_config["data_path"], "test")
+
+        # Convert audio files into TFRecords now
+        num_cores = 8
+
+        for curr_partition in ["train", "valid", "test"]:
+            print("Writing " + curr_partition + " partition...")
+
+            # Shuffle sample order
+            sample_list = dataset[curr_partition]
+            random.shuffle(sample_list)
+
+            # Create folder
+            partition_folder = os.path.join(main_folder, curr_partition)
+            os.makedirs(partition_folder)
+
+            part_entries = int(np.ceil(float(len(sample_list) / float(num_cores))))
+            processes = list()
+            for core in range(num_cores):
+                train_filename = os.path.join(partition_folder, str(core) + "_")  # address to save the TFRecords file
+                sample_list_subset = sample_list[core * part_entries:min((core + 1) * part_entries, len(sample_list))]
+                proc = Process(target=write_records,
+                               args=(sample_list_subset, model_config, input_shape, output_shape, train_filename))
+                proc.start()
+                processes.append(proc)
+            for p in processes:
+                p.join()
+
+    print("Dataset ready!")
+    # Finally, load TFRecords dataset based on the desired partition
+    dataset_folder = os.path.join(main_folder, partition)
+    records_files = glob.glob(os.path.join(dataset_folder, "*.tfrecords"))
+    random.shuffle(records_files)
+    dataset = tf.data.TFRecordDataset(records_files)
+    dataset = dataset.map(lambda x : parse_record(x, model_config["source_names"], input_shape[1:]), num_parallel_calls=model_config["num_workers"])
+    dataset = dataset.prefetch(10)
+
+    # Use the entire track
+    dataset = dataset.map(lambda x: x)
+
+    if partition == "train" and model_config["augmentation"]:
+        dataset = dataset.map(Utils.random_amplify, num_parallel_calls=model_config["num_workers"]).prefetch(100)
+
+    # Cut source outputs to center part if needed
+    dataset = dataset.map(lambda x : Utils.crop_sample(x, (input_shape[1] - output_shape[1])//2)).prefetch(100)
+
+    if partition == "train":
+        dataset = dataset.repeat()
+        dataset = dataset.shuffle(buffer_size=model_config["cache_size"])
+
+    dataset = dataset.batch(model_config["batch_size"])
+    dataset = dataset.prefetch(1)
+
+    return dataset
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
