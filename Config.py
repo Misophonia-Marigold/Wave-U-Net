@@ -12,7 +12,7 @@ def cfg():
 
                     "model_base_dir" : "checkpoints", # Base folder for model checkpoints
                     "log_dir" : "logs", # Base folder for logs files
-                    "batch_size" : 0,    #changed from 16 to 0Batch size
+                    "batch_size" : 16,    #changed from 16 to 0Batch size
                     "init_sup_sep_lr" : 1e-4, # Supervised separator learning rate
                     "epoch_it" : 2000, # Number of supervised separator steps per epoch
                     'cache_size': 4000, # Number of audio snippets buffered in the random shuffle queue. Larger is better, since workers put multiple examples of one song into this queue. The number of different songs that is sampled from with each batch equals cache_size / num_snippets_per_track. Set as high as your RAM allows.
@@ -24,7 +24,7 @@ def cfg():
                     'input_filter_size' : 15, # For Wave-U-Net: Filter size of first convolution in first downsampling block
                     'output_filter_size': 1, # For Wave-U-Net: Filter size of convolution in the output layer
                     'num_initial_filters' : 24, # Number of filters for convolution in first layer of network
-                    "num_frames": 1024, # chaned from 16384 to 1024 DESIRED number of time frames in the output waveform per samples (could be changed when using valid padding)
+                    "num_frames": 16384, # chaned from 16384 to 1024 DESIRED number of time frames in the output waveform per samples (could be changed when using valid padding)
                     'expected_sr': 22050,  # Downsample all audio input to this sampling rate
                     'mono_downmix': True,  # Whether to downsample the audio input
                     'output_type' : 'direct', # Type of output layer, either "direct" or "difference". Direct output: Each source is result of tanh activation and independent. DIfference: Last source output is equal to mixture input - sum(all other sources)
