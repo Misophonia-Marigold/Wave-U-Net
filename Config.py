@@ -2,7 +2,7 @@ import numpy as np
 from sacred import Ingredient
 
 config_ingredient = Ingredient("cfg")
-
+#input_shape
 @config_ingredient.config
 def cfg():
     # Base configuration
