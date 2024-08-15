@@ -163,4 +163,4 @@ def run(cfg):
     print("Supervised training finished! Saved model at " + sup_model_path + ". Performance: " + str(sup_loss))
 
     # Evaluate trained model on MUSDB
-    Evaluate.produce_musdb_source_estimates(model_config, sup_model_path, model_config["musdb_path"], model_config["estimates_path"])
+    Evaluate.produce_source_estimates(model_config, sup_model_path, model_config["musdb_path"], model_config["estimates_path"])
