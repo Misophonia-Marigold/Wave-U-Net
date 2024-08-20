@@ -116,14 +116,14 @@ def parse_record(example_proto, source_names, shape):
     return sample
 
 def get_dataset(model_config, input_shape, output_shape, partition):
-    '''
+   
     For a model configuration and input/output shapes of the network, get the corresponding dataset for a given partition
     :param model_config: Model config
     :param input_shape: Input shape of network
     :param output_shape: Output shape of network
     :param partition: "train", "valid", or "test" partition
     :return: Tensorflow dataset object
-    '''
+   
 
 
     # Check if pre-processed dataset is already available for this model config and partition
