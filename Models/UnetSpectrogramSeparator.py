@@ -2,8 +2,9 @@ import tensorflow as tf
 
 from Utils import LeakyReLU
 import functools
-from tensorflow.contrib.signal.python.ops import window_ops
+
 import tensorflow.signal as tf_signal
+from tensorflow.keras.layers import BatchNormalization, LeakyReLU
 
 class UnetSpectrogramSeparator:
     '''
@@ -48,11 +49,11 @@ class UnetSpectrogramSeparator:
         '''
         # Setup STFT computation
         window = functools.partial(tf_signal.hann_window, periodic=True)
-        inv_window = tf.contrib.signal.inverse_stft_window_fn(self.hop, forward_window_fn=window)
+        inv_window = tf.signal.inverse_stft_window_fn(self.hop, forward_window_fn=window)
         with tf.variable_scope("separator", reuse=reuse):
             # Compute spectrogram
             assert(input.get_shape().as_list()[2] == 1) # Model works ONLY on mono
-            stfts = tf.contrib.signal.stft(tf.squeeze(input, 2), frame_length=self.frame_len, frame_step=self.hop, fft_length=self.frame_len, window_fn=window)
+            stfts = tf.signal.stft(tf.squeeze(input, 2), frame_length=self.frame_len, frame_step=self.hop, fft_length=self.frame_len, window_fn=window)
             mix_mag = tf.abs(stfts)
             mix_angle = tf.angle(stfts)
 
@@ -69,7 +70,10 @@ class UnetSpectrogramSeparator:
                 for i in range(self.num_layers):
                     assert(current_layer.get_shape().as_list()[1] % 2 == 0 and current_layer.get_shape().as_list()[2] % 2 == 0)
                     current_layer = tf.layers.conv2d(current_layer, self.num_initial_filters*(2**i), [5, 5], strides=[2,2], activation=None, padding='same')
-                    current_layer = tf.contrib.layers.batch_norm(current_layer, activation_fn=LeakyReLU, is_training=training)
+                    #current_layer = tf.contrib.layers.batch_norm(current_layer, activation_fn=LeakyReLU, is_training=training)
+                    current_layer = BatchNormalization()(current_layer, training=training)
+                    current_layer = LeakyReLU()(current_layer)
+
 
                     if i < self.num_layers - 1:
                         enc_outputs.append(current_layer)
@@ -78,7 +82,10 @@ class UnetSpectrogramSeparator:
                 for i in range(self.num_layers - 1):
                     # Repeat: Up-convolution (transposed conv with stride), copy-and-crop feature map from down-ward path, convolution to combine both feature maps
                     current_layer = tf.layers.conv2d_transpose(current_layer, self.num_initial_filters*(2**(self.num_layers-i-2)), [5, 5], strides=[2,2], activation=None, padding="same") # *2
-                    current_layer = tf.contrib.layers.batch_norm(current_layer, is_training=training, activation_fn=tf.nn.relu)
+                    # current_layer = tf.contrib.layers.batch_norm(current_layer, is_training=training, activation_fn=tf.nn.relu)
+                    current_layer = BatchNormalization()(current_layer, training=training)
+                    current_layer = LeakyReLU()(current_layer)
+
                     current_layer = tf.concat([enc_outputs[-i-1], current_layer], axis=3) #tf.concat([enc_outputs[-i - 1], current_layer], axis=3)
                     if i < 3:
                         current_layer = tf.layers.dropout(current_layer, training=training)
@@ -99,7 +106,7 @@ class UnetSpectrogramSeparator:
                 # Reconstruct audio
                 for source_name in list(mags.keys()):
                     stft = tf.multiply(tf.complex(mags[source_name], 0.0), tf.exp(tf.complex(0.0, mix_angle)))
-                    audio = tf.contrib.signal.inverse_stft(stft, self.frame_len, self.hop, self.frame_len, window_fn=inv_window)
+                    audio = tf.signal.inverse_stft(stft, self.frame_len, self.hop, self.frame_len, window_fn=inv_window)
 
                     # Reshape to [batch_size, samples, 1]
                     audio = tf.expand_dims(audio, 2)
