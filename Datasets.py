@@ -314,14 +314,14 @@ def get_custom_dataset(data_path, partition):
 
     for track in os.listdir(data_path):
         if partition in track:
-            mix_path = os.path.join(data_path, track, 'mix.wav')
+            mix_path = os.path.join(data_path, track, 'mixed.wav')
             cough_path = os.path.join(data_path, track, 'cough.wav')
-            speech_path = os.path.join(data_path, track, 'speech.wav')
+            speech_path = os.path.join(data_path, track, 'other.wav')
 
             sample = {
-                'mix': mix_path,
+                'mixed': mixed_path,
                 'cough': cough_path,
-                'speech': speech_path
+                'other': other_path
             }
 
             dataset.append(sample)
@@ -371,8 +371,8 @@ def write_records(sample_list, model_config, input_shape, output_shape, records_
         audio_tracks = {key : np.pad(audio_tracks[key], [(pad_frames, pad_frames), (0, 0)], mode="constant", constant_values=0.0) for key in list(audio_tracks.keys())}
 
         # All audio tracks must be exactly same length and channels
-        length = audio_tracks["mix"].shape[0]
-        channels = audio_tracks["mix"].shape[1]
+        length = audio_tracks["mixed"].shape[0]
+        channels = audio_tracks["mixed"].shape[1]
         for audio in list(audio_tracks.values()):
             assert(audio.shape[0] == length)
             assert (audio.shape[1] == channels)
@@ -390,7 +390,7 @@ def write_records(sample_list, model_config, input_shape, output_shape, records_
 def parse_record(example_proto, source_names, shape):
     # Parse record from TFRecord file
 
-    all_names = source_names + ["mix"]
+    all_names = source_names + ["mixed"]
 
     features = {key : tf.io.FixedLenSequenceFeature([], allow_missing=True, dtype=tf.float32) for key in all_names}
     features["length"] = tf.io.FixedLenFeature([], tf.int64)
