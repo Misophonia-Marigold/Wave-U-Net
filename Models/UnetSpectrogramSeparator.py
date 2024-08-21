@@ -47,7 +47,7 @@ class UnetSpectrogramSeparator:
         :return: U-Net output: If return_spectrogram: Accompaniment and voice magnitudes as length-two list with two 4D tensors. Otherwise Two 3D tensors containing the raw audio estimates
         '''
         # Setup STFT computation
-        window = functools.partial(window_ops.hann_window, periodic=True)
+        window = functools.partial(tf_signal.hann_window, periodic=True)
         inv_window = tf.contrib.signal.inverse_stft_window_fn(self.hop, forward_window_fn=window)
         with tf.variable_scope("separator", reuse=reuse):
             # Compute spectrogram
