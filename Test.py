@@ -63,7 +63,7 @@ def test(model_config, partition, model_folder, load_model):
         sep_source = separator_sources[key]
 
         if model_config["network"] == "unet_spectrogram" and not model_config["raw_audio_loss"]:
-            window = functools.partial(window_ops.hann_window, periodic=True)
+            window = functools.partial(tf_signal.hann_window, periodic=True)
             stfts = tf.signal.stft(tf.squeeze(real_source, 2), frame_length=1024, frame_step=768,
                                            fft_length=1024, window_fn=window)
             real_mag = tf.abs(stfts)
