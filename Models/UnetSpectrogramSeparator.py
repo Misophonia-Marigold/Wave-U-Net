@@ -3,6 +3,7 @@ import tensorflow as tf
 from Utils import LeakyReLU
 import functools
 from tensorflow.contrib.signal.python.ops import window_ops
+import tensorflow.signal as tf_signal
 
 class UnetSpectrogramSeparator:
     '''
